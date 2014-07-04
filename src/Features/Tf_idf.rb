@@ -13,6 +13,22 @@ require 'set'
 require 'lib/ptb_tokenizer'
 require 'lib/stopwords/StopList'
 
+$IDF = Hash.new
+
+def prepare_IDF
+  idf_file = "/home/ankur/devbench/scientific/SciSWING/lib/idf.tsv"
+  File.open(idf_file, "r") do |f|
+    f.each_line do |line|
+      begin
+        word = /(.+)\t(.+)/.match(line)[1]
+        idf = /(.+)\t(.+)/.match(line)[2]
+        $IDF[word] = idf.to_f
+      rescue Exception => e
+      end
+    end
+  end
+end
+
 def compute_word_counts document
 
   # This will calculate the term frequencies of all the words in the document.
@@ -48,6 +64,24 @@ def compute_word_counts document
 
 end
 
+def get_section_idf(document, word)
+
+  # First find out the section frequency of the word in the document
+  sf = 0
+  document["content"].each do |section|
+    if section["word_set"].include?(word)
+      sf += 1
+    end
+  end
+  num = document["content"].length
+  if sf > 0
+    return -( Math.log(sf) - Math.log(num) )
+  else
+    return 0
+  end
+
+end
+
 def extract_features document
 
   # Use the dependency parse to get the verb, subject and object phrases and
@@ -61,19 +95,30 @@ def extract_features document
         "in doc: #{document["actual_doc_id"]}, sentence-id : #{sentence["id"]}"
       puts "WARNING : #{error_msg}"
     else
-      verb = sentence["dep_parse"][0]["word"]
+      verb = sentence["dep_parse"][0]["word"].downcase
+      # now that we have the word, we can get the tf, the idf can be extracted
+      # from bother google idfs and also calculating the sectional idf
       subj_node = find_node(sentence, "subj")
       obj_node = find_node(sentence, "obj")
-      puts "#{sentence["sentence"]}\nVerb: #{verb}"
+
+      web_idf = if $IDF.has_key?(verb) then $IDF[verb] else nil end
+      sec_idf = get_section_idf(document, verb)
+      puts "#{sentence["sentence"]}\nVerb: #{verb}\t\tweb_idf=#{web_idf}\tsec_idf=#{sec_idf}"
       if subj_node
         freq = document["term_freq"][subj_node["word"]]
-        puts "Subject: #{subj_node["word"]}\ttf=#{freq}"
+        word = subj_node["word"].downcase
+        web_idf = if $IDF.has_key?(word) then $IDF[word] else nil end
+        sec_idf = get_section_idf(document, word)
+        puts "Subject: #{subj_node["word"]}\ttf=#{freq}\tweb_idf=#{web_idf}\tsec_idf=#{sec_idf}"
       else
         puts "Subject : <none>"
       end
       if obj_node
         freq = document["term_freq"][obj_node["word"]]
-        puts "Oject: #{obj_node["word"]}\ttf=#{freq}"
+        word = obj_node["word"].downcase
+        web_idf = if $IDF.has_key?(word) then $IDF[word] else nil end
+        sec_idf = get_section_idf(document, word)
+        puts "Oject: #{obj_node["word"]}\ttf=#{freq}\tweb_idf=#{web_idf}\tsec_idf=#{sec_idf}"
       else
         puts "Object : <none>"
       end
@@ -104,6 +149,9 @@ def find_node(sentence, pattern)
 end
 
 ARGF.each do |l_JSN|
+
+  # Get all the IDF values from the web corpus
+  prepare_IDF
 
   $g_JSON = JSON.parse l_JSN
 
