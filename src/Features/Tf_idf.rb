@@ -38,12 +38,12 @@ def compute_word_counts document
   # NOTE For now, I have not used the stemmer. Once the pipeline is ready, will
   # see if that improves the performance drastically.
   term_freq = Hash.new
-  stoplist = StopList.new
+  $stoplist = StopList.new
   document["content"].each do |section|
     word_set= Set.new
     section["sentences"].values.each do |sentence|
       reduced = PTBTokenizer.tokenize(sentence.downcase)
-      wordlist = (stoplist.filter reduced).split
+      wordlist = ($stoplist.filter reduced).split
       # Should stem here
       # the call to the 'uniq' method might be redundant since its a set merge
       word_set.merge wordlist.uniq
@@ -82,6 +82,52 @@ def get_section_idf(document, word)
 
 end
 
+def accumulate_idf(document, word, section=true)
+  # This will initiate the recursive function to calculate the idf for each
+  # word in the dependency parse of the sentence that ispart of the sub tree
+  # whoese root node is word. The section flag specifies whether the idf value
+  # used will be from webBase or the sectional idf.
+  # Here, document, sentence and word should all be hashes.
+  value, num = recursive_compute(document, word, section)
+  if value == 0.0 then
+    return 0.0
+  else
+    return value / num
+  end
+end
+
+def recursive_compute(document, word, section)
+
+  term = word["word"].downcase
+  if $stoplist.stopwords.include?(term.downcase) or /.*[0-9].*/.match(term)
+    num = 0
+    value = 0.0
+  else
+    num = 1
+    if section
+      value = get_section_idf(document, term)
+      puts "secidf value for #{term} is #{value}"
+    else
+      value = if $IDF.has_key?(term) then $IDF[term] else 0.0 end
+      if value == 0.0
+        puts "---------------------------- #{term} not found in webBase"
+      else
+        puts "webidf value for #{term} is #{value}"
+      end
+    end
+  end
+  # Now recurse into the children.
+  if word.has_key?("children")
+    word["children"].each do |child|
+      val, n = recursive_compute(document, child, section)
+      value += val
+      num += n
+    end
+  end
+  return value, num
+
+end
+
 def extract_features document
 
   # Use the dependency parse to get the verb, subject and object phrases and
@@ -101,28 +147,30 @@ def extract_features document
       subj_node = find_node(sentence, "subj")
       obj_node = find_node(sentence, "obj")
 
-      web_idf = if $IDF.has_key?(verb) then $IDF[verb] else nil end
-      sec_idf = get_section_idf(document, verb)
-      puts "#{sentence["sentence"]}\nVerb: #{verb}\t\tweb_idf=#{web_idf}\tsec_idf=#{sec_idf}"
+      freq = document["term_freq"][verb]
+      web_idf = accumulate_idf(document, sentence["dep_parse"][0], false)
+      sec_idf = accumulate_idf(document, sentence["dep_parse"][0], true)
+      puts "#{rank}. #{sentence["sentence"]}\nVerb: #{verb}\ttf=#{freq}\tweb_idf=#{web_idf}\tsec_idf=#{sec_idf}"
       if subj_node
-        freq = document["term_freq"][subj_node["word"]]
         word = subj_node["word"].downcase
-        web_idf = if $IDF.has_key?(word) then $IDF[word] else nil end
-        sec_idf = get_section_idf(document, word)
+        freq = document["term_freq"][word]
+        web_idf = accumulate_idf(document, subj_node, false)
+        sec_idf = accumulate_idf(document, subj_node, true)
         puts "Subject: #{subj_node["word"]}\ttf=#{freq}\tweb_idf=#{web_idf}\tsec_idf=#{sec_idf}"
       else
         puts "Subject : <none>"
       end
       if obj_node
-        freq = document["term_freq"][obj_node["word"]]
         word = obj_node["word"].downcase
-        web_idf = if $IDF.has_key?(word) then $IDF[word] else nil end
-        sec_idf = get_section_idf(document, word)
+        freq = document["term_freq"][word]
+        web_idf = accumulate_idf(document, obj_node, false)
+        sec_idf = accumulate_idf(document, obj_node, true)
         puts "Oject: #{obj_node["word"]}\ttf=#{freq}\tweb_idf=#{web_idf}\tsec_idf=#{sec_idf}"
       else
         puts "Object : <none>"
       end
     end
+    puts "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
   end
 
 end
