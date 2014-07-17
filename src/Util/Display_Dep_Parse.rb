@@ -6,7 +6,7 @@
 require 'json'
 
 def print_parse root
-  string = root["word"] + "\n"
+  string = "#{root["word"]}  -  (root)\n"
   return string + get_children(root)
 end
 
@@ -26,7 +26,7 @@ ARGF.each do |l_JSN|
   $g_JSON = JSON.parse l_JSN
   $g_JSON["corpus"].each do |l_Article|
     l_Article["top_sentences"].each do |rank, sentence|
-      puts "#{rank}. #{sentence["sentence"]}"
+      puts "\n#{rank}. #{sentence["sentence"]}"
       if sentence["dep_parse"].length > 1
         # Hopefully it will never come to this
         error_msg = "There seem to be multiple root nodes (or orphaned nodes) "\

@@ -16,14 +16,16 @@ require 'lib/stopwords/StopList'
 $IDF = Hash.new
 
 def prepare_IDF
-  idf_file = "/home/ankur/devbench/scientific/SciSWING/lib/idf.tsv"
-  File.open(idf_file, "r") do |f|
-    f.each_line do |line|
-      begin
-        word = /(.+)\t(.+)/.match(line)[1]
-        idf = /(.+)\t(.+)/.match(line)[2]
-        $IDF[word] = idf.to_f
-      rescue Exception => e
+  idf_dir = "/home/ankur/devbench/scientific/SciSWING/lib/webBase/"
+  Dir.glob(idf_dir + "idf*.tsv") do |idf_file|
+    File.open(idf_file, "r") do |f|
+      f.each_line do |line|
+        begin
+          word = /(.+)\t(.+)/.match(line)[1]
+          idf = /(.+)\t(.+)/.match(line)[2]
+          $IDF[word] = idf.to_f
+        rescue Exception => e
+        end
       end
     end
   end
@@ -82,49 +84,45 @@ def get_section_idf(document, word)
 
 end
 
-def accumulate_idf(document, word, section=true)
+def accumulate_idf(document, word)
   # This will initiate the recursive function to calculate the idf for each
-  # word in the dependency parse of the sentence that ispart of the sub tree
-  # whoese root node is word. The section flag specifies whether the idf value
-  # used will be from webBase or the sectional idf.
-  # Here, document, sentence and word should all be hashes.
-  value, num = recursive_compute(document, word, section)
-  if value == 0.0 then
-    return 0.0
+  # word in the dependency parse of the sentence that is part of the sub tree
+  # whoese root node is word.
+  # Here, document and word should both be hashes.
+  web_value, sec_value, num = recursive_compute(document, word)
+  if web_value == 0.0 then
+    ret_web = 0.0
   else
-    return value / num
+    ret_web = web_value / num
   end
+  if sec_value == 0.0 then
+    ret_sec = 0.0
+  else
+    ret_sec = sec_value / num
+  end
+    return ret_web, ret_sec
 end
 
-def recursive_compute(document, word, section)
+def recursive_compute(document, word)
 
   term = word["word"].downcase
   if $stoplist.stopwords.include?(term.downcase) or /.*[0-9].*/.match(term)
-    num = 0
-    value = 0.0
+    num, web_value, sec_value = 0, 0.0, 0.0
   else
     num = 1
-    if section
-      value = get_section_idf(document, term)
-      puts "secidf value for #{term} is #{value}"
-    else
-      value = if $IDF.has_key?(term) then $IDF[term] else 0.0 end
-      if value == 0.0
-        puts "---------------------------- #{term} not found in webBase"
-      else
-        puts "webidf value for #{term} is #{value}"
-      end
-    end
+    sec_value = get_section_idf(document, term)
+    web_value = if $IDF.has_key?(term) then $IDF[term] else 0.0 end
   end
   # Now recurse into the children.
   if word.has_key?("children")
     word["children"].each do |child|
-      val, n = recursive_compute(document, child, section)
-      value += val
+      web_val, sec_val, n = recursive_compute(document, child)
+      web_value += web_val
+      sec_value += sec_val
       num += n
     end
   end
-  return value, num
+  return web_value, sec_value, num
 
 end
 
@@ -143,40 +141,36 @@ def extract_features document
     else
       verb = sentence["dep_parse"][0]["word"].downcase
       # now that we have the word, we can get the tf, the idf can be extracted
-      # from bother google idfs and also calculating the sectional idf
+      # from both webBase idfs and also calculating the sectional idf
       subj_node = find_node(sentence, "subj")
       obj_node = find_node(sentence, "obj")
 
-      freq = document["term_freq"][verb]
-      web_idf = accumulate_idf(document, sentence["dep_parse"][0], false)
-      sec_idf = accumulate_idf(document, sentence["dep_parse"][0], true)
-      puts "#{rank}. #{sentence["sentence"]}\nVerb: #{verb}\ttf=#{freq}\tweb_idf=#{web_idf}\tsec_idf=#{sec_idf}"
+      freq = if document["term_freq"].has_key?(verb) then document["term_freq"][verb] else 0.0 end
+      web_idf = if $IDF.has_key?(verb) then $IDF[verb] else 0.0 end
+      sec_idf = get_section_idf(document, verb)
+      sentence["features"] = {"verb_tf"=>freq,"verb_web_idf"=>web_idf,"verb_sec_idf"=>sec_idf}
+
       if subj_node
         word = subj_node["word"].downcase
-        freq = document["term_freq"][word]
-        web_idf = accumulate_idf(document, subj_node, false)
-        sec_idf = accumulate_idf(document, subj_node, true)
-        puts "Subject: #{subj_node["word"]}\ttf=#{freq}\tweb_idf=#{web_idf}\tsec_idf=#{sec_idf}"
-      else
-        puts "Subject : <none>"
+        freq = if document["term_freq"].has_key?(word) then document["term_freq"][word] else 0.0 end
+        web_idf, sec_idf = accumulate_idf(document, subj_node)
+        sentence["features"].merge!({"subj_tf"=>freq,"subj_web_idf"=>web_idf,"subj_sec_idf"=>sec_idf})
       end
+
       if obj_node
         word = obj_node["word"].downcase
-        freq = document["term_freq"][word]
-        web_idf = accumulate_idf(document, obj_node, false)
-        sec_idf = accumulate_idf(document, obj_node, true)
-        puts "Oject: #{obj_node["word"]}\ttf=#{freq}\tweb_idf=#{web_idf}\tsec_idf=#{sec_idf}"
-      else
-        puts "Object : <none>"
+        freq = if document["term_freq"].has_key?(word) then document["term_freq"][word] else 0.0 end
+        web_idf, sec_idf = accumulate_idf(document, obj_node)
+        sentence["features"].merge!({"obj_tf"=>freq,"obj_web_idf"=>web_idf,"obj_sec_idf"=>sec_idf})
       end
     end
-    puts "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
   end
 
 end
 
 def find_node(sentence, pattern)
   root = sentence["dep_parse"][0]
+  # Matching regexp
   if /#{pattern}/.match(root["dep"])
     return root
   end
@@ -209,5 +203,5 @@ ARGF.each do |l_JSN|
     extract_features l_Article
   end
 
-  #puts JSON.pretty_generate $g_JSON
+  puts JSON.generate $g_JSON
 end

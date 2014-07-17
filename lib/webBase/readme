@@ -1,0 +1,3 @@
+This folder is basically a way to introduce idf values that can be used as one of the features in the summarizer.
+To include more words, include a tab-separated file in this directory which with the name "idf" followed by a
+number. For example "idf6.tsv".
