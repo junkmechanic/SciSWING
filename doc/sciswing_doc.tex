@@ -1,0 +1,36 @@
+\documentclass[12pt]{scrreprt}
+\usepackage{times}
+\usepackage{url}
+\usepackage{latexsym}
+\usepackage{enumitem}
+
+\title{SciSWING Documentation}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\chapter{Introduction}
+This document explains the architecture of SciSWING Summarization System.
+The system was implemented based on the method developed by the WING group SciDocSummarization and follows the design principles of SWING summarization system, although serves a slightly different problem.
+Where SWING is used for multi-document summarization of news articles (for example TAC 2011 task), SciSWING is used to summarize a scientific article based on the content inside the article.
+
+For this purpose, a pipeline was developed that consisted of the following modules in order to summarize a scientific article:
+\begin{itemize}
+  \item A preprocessing step for segmentation of the article text into tokens like words and sentences.
+  \item A ranking module, an implementation of TextRank, to rank all the sentences in the article based on the amount of word overlap of one sentence with the rest of the sentences.
+  \item A classification module, to classify sentences into one of the two classes, "belonging to summary" and "not belonging to summary", using features extracted throuhg the tf-idf values of verb, subject and object phrases from the dependency trees of sentneces.
+\end{itemize}
+\chapter{Design Considerations}
+Although, a constant effort was made to follow the architecture of SWING, most of the modules could not be used directly for SciSWING because these modules were designed to work on the input data as presented by TAC 2011 summarization track.
+Another difference was the way in which the processed data was utilized by the two systems.
+Hence, modifications were made to the modules that were adopted from SWING to handle SciDocSumm data.
+Of course, certain new modules were introduced for processes that were specific to SciSWING.
+\chapter{Design Approach}
+Like SWING, the software consists of independent Ruby modules that are connected using Unix pipes.
+The outputs from most of the modules follow a similar format of spitting out json objects that carry the information passed to the modules as input along with the addition of information processed/extracted by the respective module.
+In case of SWING, a configuraiton file (configuration.conf in the root directory of the package) is used to control the different features that should be extracted and used for classification of sentences.
+Since in SciSWING, the features are of the same kind (tf-idf scores), this configuration file has not been utilized.
+However, a functionality can be introduced later through this conf file to choose whether to classify the ranked sentences or just use the ranked sentences to generate the summary without considering the rank of the sentence.
+
+The implementation has been described module by module. The sequence of description of modules matches with the respective modules placement in the pipeline.
+
