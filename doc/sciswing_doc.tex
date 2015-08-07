@@ -4,6 +4,12 @@
 \usepackage{latexsym}
 \usepackage{enumitem}
 
+\lstdefinelanguage{json}
+{
+        morestring=[b]",
+        morestring=[d]'
+}
+
 \title{SciSWING Documentation}
 
 \begin{document}
@@ -28,9 +34,50 @@ Of course, certain new modules were introduced for processes that were specific 
 \chapter{Design Approach}
 Like SWING, the software consists of independent Ruby modules that are connected using Unix pipes.
 The outputs from most of the modules follow a similar format of spitting out json objects that carry the information passed to the modules as input along with the addition of information processed/extracted by the respective module.
+This makes it possible to replace a module with another that implementes a similar functionality, the only constraint being that the ouput of the replaced module should be in accordance with what the module called next expects it to be.
 In case of SWING, a configuraiton file (configuration.conf in the root directory of the package) is used to control the different features that should be extracted and used for classification of sentences.
 Since in SciSWING, the features are of the same kind (tf-idf scores), this configuration file has not been utilized.
 However, a functionality can be introduced later through this conf file to choose whether to classify the ranked sentences or just use the ranked sentences to generate the summary without considering the rank of the sentence.
 
-The implementation has been described module by module. The sequence of description of modules matches with the respective modules placement in the pipeline.
+The entire pipeline is as follows (possible figure here).
+The first step is to read the documents that have to be summarized and form a basic JSON to which more information (fields and their values) would be added by each module as it passes through the pipeline.
+The next step is to tokenize the document into sentences.
+Then the sentences are ranked using TextRank algorithm and the top 15 sentences are selected.
+The next step is to obtain the dependency parses for these top sentences.
+Using the dependency parses, the tf-idf features are calculated and then the feature vector of each sentence is given as input to the SVM trained model for classification into one of the two classes, +1 (sentence should belong to the summary) or -1 (sentence should not belong to the summary).
+<-- Need to check if MMR is properly implemented before mentioning here -->
+\chapter{Data Format}
+All modules have been designed to read input data as a JSON string.
+The JSON looks like this:
+\begin{lstlisting}[language=json]
+{
+  "corpus": [
+    {
+      "doc_id": 0,
+      "actual_doc_id": "H92-1022-parscit-section.xml",
+      "content": [
+        {
+          "section": "abstract",
+          "title": "ABSTRACT",
+          "sentences": {
+            "0": "Automatic part of speech tagging is an area of natural language processing ...",
+            "1": "In this paper, we present a simple rule-based part of speech tagger ...",
+            ...
+          }
+        }
+        ...
+      ]
+    }
+    ...
+  ]
+}
+\end{lstlisting}
 
+At the top most level is the key "corpus" that represents an array of documents.
+Each document in this array is represented by a json object with its own set of key value pairs.
+As is evident, "content" represents the entire text in the document as an array of objects, each representing a section.
+Similarly, as each module processes the part of this document that it is concerned with, it add the new information either to an existing object or appends a new object within the document with its own key.
+
+The implementation has been described module by module. The sequence of description of modules matches with the respective module's placement in the pipeline.
+
+\end{document}
